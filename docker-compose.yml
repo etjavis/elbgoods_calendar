@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+    mysql:
+       image: mysql:8.0.22
+       container_name: elbgoods_calendar_mysql
+       environment:
+           MYSQL_DATABASE: elbgoods_calendar
+           MYSQL_ROOT_HOST: '%' # Muss gesetzt werden, obwohl dies in anderen Projekten nicht gebraucht wird
+           MYSQL_USER: user
+           MYSQL_PASSWORD: secret
+           MYSQL_ROOT_PASSWORD: secret
+       command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+       volumes:
+           - ./mysql/data:/var/lib/mysql:rw
+       ports:
+           - "3306:3306"
+       restart: always
+       logging:
+           options:
+               max-size: "1m"
+               max-file: "3"
+
+    php:
+       container_name: elbgoods_calendar_php
+       build:
+           context: ./php
+       working_dir: /var/www/html
+       depends_on:
+           - mysql
+       volumes:
+           - ./php/asset/timezone.ini:/usr/local/etc/php/conf.d/timezone.ini
+           - ./php/asset/file.ini:/usr/local/etc/php/conf.d/file.ini
+           - ./laravel:/var/www/html
+       command: bash -c "php-fpm"
+       restart: always
+       logging:
+           options:
+               max-size: "1m"
+               max-file: "3"
+               
+    nginx:
+       container_name: elbgoods_calendar_nginx
+       image: nginx:1.17.8
+       command: ["nginx", "-g", "daemon off;"]
+       working_dir: /var/www/html
+       depends_on:
+           - php
+           - mysql
+       volumes:
+           - ./nginx/asset/:/etc/nginx/conf.d/
+           - ./nginx/log:/var/log/nginx/:rw
+           - ./laravel:/var/www/html
+       ports:
+           - "80:80"
+       links:
+           - php
+       restart: always
+       logging:
+           options:
+               max-size: "1m"
+               max-file: "3"
