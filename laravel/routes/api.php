@@ -16,8 +16,6 @@ use Illuminate\Support\Facades\Route;
 */
 
 
-use App\Models\Calendar\CalendarBookedTime;
-
 Route::get('/', function () {
     $routes = Route::getRoutes();
     foreach ($routes->getRoutes() as $route) {

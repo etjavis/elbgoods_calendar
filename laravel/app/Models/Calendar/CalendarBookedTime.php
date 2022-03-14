@@ -42,7 +42,7 @@ class CalendarBookedTime extends Model
      * @param Carbon $until Bisdatum
      * @param bool $takeFullDay
      */
-    public static function getBookedTimesInRangeQuery(Carbon $from, Carbon $until, bool $takeFullDay = false): Builder
+    public function scopeGetBookedTimesInRangeQuery($query, Carbon $from, Carbon $until, bool $takeFullDay = false): Builder
     {
         if ($takeFullDay) {
             $from = $from->startOfDay();
@@ -50,7 +50,7 @@ class CalendarBookedTime extends Model
         }
 
         // Wir bauen eine Klammerung ein, falls später weitere Where Bedingungen hinzugefügt werden
-        return CalendarBookedTime::where(function($query) use($from, $until) {
+        return $query->where(function($query) use($from, $until) {
                 $query->whereBetween('from_at', [$from, $until])
                     ->orWhereBetween(DB::raw('"' . $from . '"'), [DB::raw('from_at'), DB::raw('until_at')])
                     ->orWhereBetween(DB::raw('"' . $until . '"'), [DB::raw('from_at'), DB::raw('until_at')]);
@@ -67,11 +67,10 @@ class CalendarBookedTime extends Model
      */
     public function bookingAllowed(): bool
     {
-        $amountOfConflicts = 0;
         $currentId = $this->getKey();
 
         // Es darf in der Range keine Buchung existieren die schon auf Booked steht
-        $amountOfConflicts += self::getBookedTimesInRangeQuery($this->from_at, $this->until_at)
+        $amountOfHits = self::getBookedTimesInRangeQuery($this->from_at, $this->until_at)
             ->where('calendar_state_id', CalendarStateEnum::Booked->value)
             ->when($currentId !== null, function ($query) use($currentId) {
                 // Wenn ich schon existiere, dann möchte ich mich selbst nicht in der Überprüfung haben
@@ -79,13 +78,21 @@ class CalendarBookedTime extends Model
             })
             ->count();
 
+        if ($amountOfHits > 0) {
+            return false;
+        }
+
         // Wenn ich auf booked stehe, dann darf in der DB für die Range kein Eintrag existieren
         if ($this->calendar_state_id === CalendarStateEnum::Booked->value) {
-            $amountOfConflicts += self::getBookedTimesInRangeQuery($this->from_at, $this->until_at)
+            $amountOfHits = self::getBookedTimesInRangeQuery($this->from_at, $this->until_at)
             ->when($currentId !== null, function ($query) use($currentId) {
                 $query->where('id', '!=', $currentId);
             })
             ->count();
+
+            if ($amountOfHits > 0) {
+                return false;
+            }
         }
 
         // Überprüfen, ob wir schon Tentative Einträge haben
@@ -98,14 +105,18 @@ class CalendarBookedTime extends Model
         // Überprüfen, ob wir schon ein Tentative Eintrag habe oder ob ich selbst ein Tentative Eintrag bin
         if ($hasTentative || $this->calendar_state_id === CalendarStateEnum::Tentative->value) {
             // Es darf in der Range maximal 3 weitere Buchungen existieren
-            $amountOfConflicts += self::getBookedTimesInRangeQuery($this->from_at, $this->until_at)
+            $hit = self::getBookedTimesInRangeQuery($this->from_at, $this->until_at)
                 ->where('calendar_state_id', '!=', CalendarStateEnum::Booked->value)
                 ->when($currentId !== null, function ($query) use($currentId) {
                     $query->where('id', '!=', $currentId);
                 })
-                ->count() > 3 ? 1 : 0;
+                ->count() > 3 ? true : false;
+
+            if (!$hit) {
+                return false;
+            }
         }
 
-        return $amountOfConflicts === 0;
+        return true;
     }
 }

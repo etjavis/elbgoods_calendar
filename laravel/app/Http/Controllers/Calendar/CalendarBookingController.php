@@ -28,7 +28,7 @@ class CalendarBookingController extends Controller
         // From kann immer Dynamisch gesetzt werden, ansonsten einfach heute
         $from = $request->date('from') ?? now();
 
-        if (($range = $request->get('range', null)) !== null) {
+        if (($range = $request->get('range')) !== null) {
             // Erhöht den heutigen Tag mit der, in der Datenbankhinterlegte, Carbon Funktion
             $until = now()->{CalendarDefaultTimeRange::where('name', $range)->first()->carbon_function}();
         } else {
@@ -52,9 +52,9 @@ class CalendarBookingController extends Controller
         if ($bookedTime->bookingAllowed()) {
             $bookedTime->save();
             return response()->json($bookedTime, 201);
-        } else {
-            abort(409, 'Die Buchung konnte nicht ausgeführt werden, der Zeitraum ist schon vergeben.');
         }
+         
+        abort(409, 'Die Buchung konnte nicht ausgeführt werden, der Zeitraum ist schon vergeben.');
     }
 
     /**
@@ -75,7 +75,7 @@ class CalendarBookingController extends Controller
      */
     public function update(Request $request, CalendarBookedTime $bookedTime)
     {
-        list($endsWithFrom, $endsWithUntil) = CalendarAllowedBookingTime::generatForEndsWithCheck();
+        [$endsWithFrom, $endsWithUntil] = CalendarAllowedBookingTime::generatForEndsWithCheck();
 
         $data = $request->validate([
             'from_at' => ['date_format:Y-m-d H:i:s', 'required_with:until_at', 'ends_with:' . $endsWithFrom],
@@ -93,9 +93,9 @@ class CalendarBookingController extends Controller
         if ($bookedTime->bookingAllowed()) {
             $bookedTime->save();
             return response()->json($bookedTime, 200);
-        } else {
-            abort(409, 'Die Buchung konnte nicht ausgeführt werden, der Zeitraum ist schon vergeben.');
         }
+
+        abort(409, 'Die Buchung konnte nicht ausgeführt werden, der Zeitraum ist schon vergeben.');
     }
 
     /**
